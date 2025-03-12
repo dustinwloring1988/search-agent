@@ -6,6 +6,7 @@
 import { Message } from '../config/prompts';
 import { OllamaAPI, StreamCallback } from './ollama';
 import { logConversation, logError } from '../utils/logger';
+import toolManager, { ToolResult } from '../tools';
 
 // Load environment variables
 const OLLAMA_API_HOST = process.env.OLLAMA_API_HOST || 'http://localhost:11434';
@@ -33,8 +34,11 @@ export async function queryAI(messages: Message[]): Promise<string> {
       logConversation(message);
     });
 
+    // Get tool definitions
+    const toolDefinitions = toolManager.getToolDefinitions();
+
     // Query the AI
-    const response = await ollamaApi.query(messages);
+    const response = await ollamaApi.query(messages, toolDefinitions);
 
     // Create and log the AI's response message
     const aiMessage: Message = {
@@ -51,29 +55,61 @@ export async function queryAI(messages: Message[]): Promise<string> {
 }
 
 /**
- * Query the AI with streaming output
+ * Callback for tool execution results
+ */
+export type ToolExecutionCallback = (result: ToolResult) => void;
+
+/**
+ * Stream query with tool execution
  * @param messages - Array of messages to send to the AI
  * @param callback - Function to call with each chunk of the response
+ * @param toolCallback - Function to call when a tool execution is completed
  * @returns Promise that resolves when the streaming is complete
  */
-export async function streamQueryAI(messages: Message[], callback: StreamCallback): Promise<void> {
+export async function streamQueryAI(
+  messages: Message[],
+  callback: StreamCallback,
+  toolCallback?: ToolExecutionCallback
+): Promise<void> {
   try {
     // Log the messages being sent
     messages.forEach(message => {
       logConversation(message);
     });
 
+    // Get tool definitions
+    const toolDefinitions = toolManager.getToolDefinitions();
+
     // Track the complete response for logging
     let completeResponse = '';
 
-    // Create a wrapper callback to collect the complete response
-    const wrappedCallback: StreamCallback = (text, done) => {
+    // Create a wrapper callback to collect the complete response and handle tool calls
+    const wrappedCallback: StreamCallback = async (text, done, toolCalls) => {
       // Add the text to the complete response
       completeResponse += text;
-      
+
+      // Handle tool calls if present and a tool callback is provided
+      if (toolCalls && toolCalls.length > 0 && toolCallback) {
+        for (const toolCall of toolCalls) {
+          try {
+            // Execute the tool
+            const result = await toolManager.executeTool(toolCall);
+
+            // Call the tool callback with the result
+            toolCallback(result);
+          } catch (error) {
+            logError(error as Error, `streamQueryAI.toolExecution (${toolCall.name})`);
+            toolCallback({
+              success: false,
+              error: (error as Error).message,
+            });
+          }
+        }
+      }
+
       // Call the original callback
-      callback(text, done);
-      
+      callback(text, done, toolCalls);
+
       // If this is the final chunk, log the complete response
       if (done && completeResponse) {
         const aiMessage: Message = {
@@ -85,7 +121,7 @@ export async function streamQueryAI(messages: Message[], callback: StreamCallbac
     };
 
     // Stream the query
-    await ollamaApi.streamQuery(messages, wrappedCallback);
+    await ollamaApi.streamQuery(messages, wrappedCallback, toolDefinitions);
   } catch (error) {
     logError(error as Error, 'streamQueryAI');
     throw new Error(`Failed to stream query AI: ${(error as Error).message}`);
@@ -103,4 +139,4 @@ export async function isAIAvailable(): Promise<boolean> {
     logError(error as Error, 'isAIAvailable');
     return false;
   }
-} 
+}

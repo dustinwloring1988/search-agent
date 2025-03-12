@@ -5,6 +5,7 @@
 
 import { Message } from '../config/prompts';
 import { logError } from '../utils/logger';
+import { OllamaToolDefinition, ToolCall } from '../tools/types';
 
 // Default API configuration
 const DEFAULT_API_HOST = 'http://localhost:11434';
@@ -39,12 +40,21 @@ interface OllamaResponse {
   prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
+  tool_calls?: OllamaToolCall[];
+}
+
+/**
+ * Tool call format from Ollama API
+ */
+interface OllamaToolCall {
+  name: string;
+  parameters: Record<string, unknown>;
 }
 
 /**
  * Streaming callback function type
  */
-export type StreamCallback = (text: string, done: boolean) => void;
+export type StreamCallback = (text: string, done: boolean, toolCalls?: ToolCall[]) => void;
 
 /**
  * A wrapper class for interacting with the Ollama API
@@ -73,8 +83,9 @@ export class OllamaAPI {
    */
   private formatMessages(messages: Message[]): string {
     return messages
-      .map((msg) => {
-        const role = msg.role === 'assistant' ? 'Assistant' : msg.role === 'system' ? 'System' : 'User';
+      .map(msg => {
+        const role =
+          msg.role === 'assistant' ? 'Assistant' : msg.role === 'system' ? 'System' : 'User';
         return `${role}: ${msg.content}`;
       })
       .join('\n\n');
@@ -83,24 +94,32 @@ export class OllamaAPI {
   /**
    * Queries the Ollama API with the provided messages
    * @param messages - Array of message objects to send
+   * @param tools - Optional array of tool definitions to provide to the model
    * @returns Response text from the API
    */
-  public async query(messages: Message[]): Promise<string> {
+  public async query(messages: Message[], tools?: OllamaToolDefinition[]): Promise<string> {
     try {
       const formattedPrompt = this.formatMessages(messages);
-      
+
+      const requestBody: Record<string, unknown> = {
+        model: this.model,
+        prompt: formattedPrompt,
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+        stream: false,
+      };
+
+      // Add tools to the request if provided
+      if (tools && tools.length > 0) {
+        requestBody.tools = tools;
+      }
+
       const response = await fetch(`${this.apiHost}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: this.model,
-          prompt: formattedPrompt,
-          temperature: this.temperature,
-          max_tokens: this.maxTokens,
-          stream: false,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -108,7 +127,7 @@ export class OllamaAPI {
         throw new Error(`Ollama API error: ${response.status} ${errorText}`);
       }
 
-      const result = await response.json() as OllamaResponse;
+      const result = (await response.json()) as OllamaResponse;
       return result.response;
     } catch (error) {
       logError(error as Error, 'OllamaAPI.query');
@@ -120,23 +139,35 @@ export class OllamaAPI {
    * Streams a response from the Ollama API
    * @param messages - Array of message objects to send
    * @param callback - Function to call with each chunk of the response
+   * @param tools - Optional array of tool definitions to provide to the model
    */
-  public async streamQuery(messages: Message[], callback: StreamCallback): Promise<void> {
+  public async streamQuery(
+    messages: Message[],
+    callback: StreamCallback,
+    tools?: OllamaToolDefinition[]
+  ): Promise<void> {
     try {
       const formattedPrompt = this.formatMessages(messages);
-      
+
+      const requestBody: Record<string, unknown> = {
+        model: this.model,
+        prompt: formattedPrompt,
+        temperature: this.temperature,
+        max_tokens: this.maxTokens,
+        stream: true,
+      };
+
+      // Add tools to the request if provided
+      if (tools && tools.length > 0) {
+        requestBody.tools = tools;
+      }
+
       const response = await fetch(`${this.apiHost}/api/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: this.model,
-          prompt: formattedPrompt,
-          temperature: this.temperature,
-          max_tokens: this.maxTokens,
-          stream: true,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -165,11 +196,22 @@ export class OllamaAPI {
         try {
           // Each line is a separate JSON object
           const lines = text.split('\n').filter(line => line.trim());
-          
+
           for (const line of lines) {
             const chunk = JSON.parse(line) as OllamaResponse;
-            callback(chunk.response, false);
-            
+
+            // Check if there are tool calls in the response
+            if (chunk.tool_calls && chunk.tool_calls.length > 0) {
+              const toolCalls = chunk.tool_calls.map(tc => ({
+                name: tc.name,
+                parameters: tc.parameters,
+              }));
+
+              callback(chunk.response, chunk.done, toolCalls);
+            } else {
+              callback(chunk.response, chunk.done);
+            }
+
             if (chunk.done) {
               callback('', true);
               return;
@@ -198,7 +240,8 @@ export class OllamaAPI {
       });
       return response.ok;
     } catch (error) {
+      logError(error as Error, 'OllamaAPI.isAvailable');
       return false;
     }
   }
-} 
+}
