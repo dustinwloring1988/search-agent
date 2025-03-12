@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App info
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
+  // Add prompt handling
+  submitPrompt: (prompt: string) => ipcRenderer.invoke('submit-prompt', prompt),
+
   // Add more exposed APIs here as needed for the app functionality
   // This will be expanded as we add more features later
 });

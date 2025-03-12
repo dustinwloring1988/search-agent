@@ -27,7 +27,7 @@ export class RendererPromptManager {
       content,
     });
     console.log('User prompt added:', content);
-    
+
     // In a real implementation, this would communicate with the main process
   }
 
@@ -50,4 +50,4 @@ export class RendererPromptManager {
   public getHistory(): Array<{ role: 'user' | 'assistant'; content: string }> {
     return [...this.history];
   }
-} 
+}

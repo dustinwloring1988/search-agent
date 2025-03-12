@@ -8,7 +8,12 @@ import { RendererPromptManager } from './rendererUtils';
 // Interface for Electron API exposed through preload script
 interface ElectronAPI {
   getAppVersion: () => Promise<string>;
-  // Add more API methods as needed
+  submitPrompt: (prompt: string) => Promise<{
+    success: boolean;
+    response?: string;
+    error?: string;
+    conversation?: Array<{ role: string; content: string }>;
+  }>;
 }
 
 // Add ElectronAPI to the Window interface
@@ -64,7 +69,7 @@ function setupEventListeners(): void {
 }
 
 // Handle user prompt submission
-function handlePromptSubmission(): void {
+async function handlePromptSubmission(): Promise<void> {
   const prompt = promptInput.value.trim();
 
   if (!prompt) {
@@ -83,6 +88,32 @@ function handlePromptSubmission(): void {
 
   // Add example action (placeholder)
   addAction('Received prompt: ' + prompt);
+
+  try {
+    // Submit the prompt to the main process
+    const result = await window.electronAPI.submitPrompt(prompt);
+
+    if (result.success && result.response) {
+      // Display the AI's response
+      resultsContent.innerHTML = '<p><strong>Response:</strong></p><p>' + result.response + '</p>';
+
+      // Add the response to the local conversation history
+      promptManager.addAssistantResponse(result.response);
+
+      // Add action for response received
+      addAction('Received response from AI');
+    } else {
+      // Display error message
+      resultsContent.innerHTML =
+        '<p class="error">Error: ' + (result.error || 'Unknown error') + '</p>';
+      addAction('Error processing prompt');
+    }
+  } catch (error) {
+    // Handle any errors
+    console.error('Error submitting prompt:', error);
+    resultsContent.innerHTML = '<p class="error">Error: Failed to process prompt</p>';
+    addAction('Error processing prompt');
+  }
 
   // Clear input after submission
   promptInput.value = '';

@@ -1,9 +1,14 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as path from 'path';
 import * as url from 'url';
+import { PromptManager } from './utils/promptManager';
+import { queryAI } from './ai';
 
 // Keep a global reference of the window object to avoid it being garbage collected
 let mainWindow: BrowserWindow | null = null;
+
+// Create a prompt manager instance
+const promptManager = new PromptManager();
 
 // Enable hot reload for development mode
 if (process.env.NODE_ENV === 'development') {
@@ -84,4 +89,37 @@ app.on('window-all-closed', () => {
 // Set up IPC event handlers between the main process and renderer process
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+// Handle prompt submission from the renderer
+ipcMain.handle('submit-prompt', async (_, prompt: string) => {
+  try {
+    // Initialize the prompt manager if not already done
+    promptManager.initialize();
+
+    // Add the user prompt to the conversation
+    promptManager.addUserPrompt(prompt);
+
+    // Get the current conversation
+    const conversation = promptManager.getConversation();
+
+    // Process the prompt with the AI
+    const response = await queryAI(conversation);
+
+    // Add the AI's response to the conversation
+    promptManager.addAssistantResponse(response);
+
+    // Return the response to the renderer
+    return {
+      success: true,
+      response,
+      conversation: promptManager.getConversation(),
+    };
+  } catch (error) {
+    console.error('Error processing prompt:', error);
+    return {
+      success: false,
+      error: (error as Error).message,
+    };
+  }
 });
