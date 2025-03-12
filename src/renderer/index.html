@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    />
+    <title>Search Agent</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Search Agent</h1>
+        <div id="app-version"></div>
+      </header>
+
+      <main>
+        <div id="left-section">
+          <div id="prompt-container">
+            <textarea id="prompt-input" placeholder="Enter your prompt here..."></textarea>
+            <button id="submit-prompt">Submit</button>
+          </div>
+          <div id="results-container">
+            <h2>Results</h2>
+            <div id="results-content"></div>
+          </div>
+        </div>
+
+        <div id="right-section">
+          <div id="action-list-container">
+            <h2>Actions</h2>
+            <ul id="action-list"></ul>
+          </div>
+          <div id="browser-view-container">
+            <h2>Browser Preview</h2>
+            <div id="browser-view"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
