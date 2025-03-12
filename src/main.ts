@@ -38,7 +38,7 @@ function createWindow(): void {
     process.env.NODE_ENV === 'development'
       ? 'http://localhost:3000' // Dev server URL
       : url.format({
-          pathname: path.join(__dirname, '..', 'renderer', 'index.html'),
+          pathname: path.join(__dirname, 'renderer', 'index.html'),
           protocol: 'file:',
           slashes: true,
         });
