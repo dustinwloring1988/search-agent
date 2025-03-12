@@ -3,6 +3,8 @@
  * Handles the user interface and interaction with the main process
  */
 
+import { PromptManager } from '../utils/promptManager';
+
 // Interface for Electron API exposed through preload script
 interface ElectronAPI {
   getAppVersion: () => Promise<string>;
@@ -16,6 +18,9 @@ declare global {
   }
 }
 
+// Create a prompt manager instance
+const promptManager = new PromptManager();
+
 // DOM Elements
 const promptInput = document.getElementById('prompt-input') as HTMLTextAreaElement;
 const submitButton = document.getElementById('submit-prompt') as HTMLButtonElement;
@@ -23,6 +28,7 @@ const resultsContent = document.getElementById('results-content') as HTMLDivElem
 const actionList = document.getElementById('action-list') as HTMLUListElement;
 // Keeping browserView for future use
 // @ts-expect-error - Will be used when we integrate with Playwright
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const browserViewContainer = document.getElementById('browser-view') as HTMLDivElement;
 const appVersion = document.getElementById('app-version') as HTMLDivElement;
 
@@ -32,6 +38,9 @@ async function initApp(): Promise<void> {
     // Display app version
     const version = await window.electronAPI.getAppVersion();
     appVersion.textContent = `Version: ${version}`;
+
+    // Initialize prompt manager
+    promptManager.initialize();
 
     // Set up event listeners
     setupEventListeners();
@@ -62,6 +71,9 @@ function handlePromptSubmission(): void {
     // Don't submit empty prompts
     return;
   }
+
+  // Add user prompt to conversation
+  promptManager.addUserPrompt(prompt);
 
   // Display placeholder for now
   resultsContent.innerHTML = '<p>Processing prompt: "' + prompt + '"</p>';
