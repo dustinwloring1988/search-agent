@@ -21,9 +21,9 @@ const promptInput = document.getElementById('prompt-input') as HTMLTextAreaEleme
 const submitButton = document.getElementById('submit-prompt') as HTMLButtonElement;
 const resultsContent = document.getElementById('results-content') as HTMLDivElement;
 const actionList = document.getElementById('action-list') as HTMLUListElement;
-// Keeping browserView for future use but marking it as unused for TypeScript
-// @ts-ignore
-const browserView = document.getElementById('browser-view') as HTMLDivElement;
+// Keeping browserView for future use
+// @ts-expect-error - Will be used when we integrate with Playwright
+const browserViewContainer = document.getElementById('browser-view') as HTMLDivElement;
 const appVersion = document.getElementById('app-version') as HTMLDivElement;
 
 // Initialize application
