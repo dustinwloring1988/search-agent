@@ -3,7 +3,7 @@
  * Handles the user interface and interaction with the main process
  */
 
-import { PromptManager } from '../utils/promptManager';
+import { RendererPromptManager } from './rendererUtils';
 
 // Interface for Electron API exposed through preload script
 interface ElectronAPI {
@@ -19,7 +19,7 @@ declare global {
 }
 
 // Create a prompt manager instance
-const promptManager = new PromptManager();
+const promptManager = new RendererPromptManager();
 
 // DOM Elements
 const promptInput = document.getElementById('prompt-input') as HTMLTextAreaElement;
