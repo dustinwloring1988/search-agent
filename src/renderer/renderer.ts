@@ -12,8 +12,21 @@ interface ElectronAPI {
     success: boolean;
     response?: string;
     error?: string;
+    toolResults?: ToolResult[];
     conversation?: Array<{ role: string; content: string }>;
   }>;
+  onStreamResponse: (
+    callback: (data: { text: string; done: boolean; toolResults: ToolResult[] }) => void
+  ) => () => void;
+  onToolExecution: (callback: (result: ToolResult) => void) => () => void;
+}
+
+// Define types for tool results
+interface ToolResult {
+  success: boolean;
+  toolName?: string;
+  error?: string;
+  browserState?: any; // Browser state can vary based on tool
 }
 
 // Add ElectronAPI to the Window interface
@@ -90,23 +103,49 @@ async function handlePromptSubmission(): Promise<void> {
   addAction('Received prompt: ' + prompt);
 
   try {
+    // Set up stream response handler
+    const removeStreamListener = window.electronAPI.onStreamResponse(data => {
+      const { text, done } = data;
+
+      // Update the results content with the streamed text
+      resultsContent.innerHTML = '<p><strong>Response:</strong></p><p>' + text + '</p>';
+
+      if (done) {
+        // Add action for response completed
+        addAction('Response completed');
+
+        // Clean up the stream listener when done
+        removeStreamListener();
+      }
+    });
+
+    // Set up tool execution handler
+    const removeToolListener = window.electronAPI.onToolExecution(result => {
+      // Add the tool execution to the action list
+      addAction(
+        `Executed tool: ${result.toolName || 'unknown'} (${result.success ? 'Success' : 'Failed'})`
+      );
+
+      // If it's a tool with visual output (like navigation), update the browser view
+      if (result.browserState) {
+        // In a real implementation, we would update the browser view here
+        // For now, just log the tool execution
+        console.log('Tool execution result:', result);
+      }
+    });
+
     // Submit the prompt to the main process
     const result = await window.electronAPI.submitPrompt(prompt);
 
-    if (result.success && result.response) {
-      // Display the AI's response
-      resultsContent.innerHTML = '<p><strong>Response:</strong></p><p>' + result.response + '</p>';
-
-      // Add the response to the local conversation history
-      promptManager.addAssistantResponse(result.response);
-
-      // Add action for response received
-      addAction('Received response from AI');
-    } else {
+    if (!result.success) {
       // Display error message
       resultsContent.innerHTML =
         '<p class="error">Error: ' + (result.error || 'Unknown error') + '</p>';
       addAction('Error processing prompt');
+
+      // Clean up listeners
+      removeStreamListener();
+      removeToolListener();
     }
   } catch (error) {
     // Handle any errors

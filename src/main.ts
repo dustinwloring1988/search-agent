@@ -2,7 +2,8 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import * as path from 'path';
 import * as url from 'url';
 import { PromptManager } from './utils/promptManager';
-import { queryAI } from './ai';
+import { streamQueryAI, ToolExecutionCallback } from './ai';
+import { ToolResult } from './tools';
 
 // Keep a global reference of the window object to avoid it being garbage collected
 let mainWindow: BrowserWindow | null = null;
@@ -103,16 +104,50 @@ ipcMain.handle('submit-prompt', async (_, prompt: string) => {
     // Get the current conversation
     const conversation = promptManager.getConversation();
 
-    // Process the prompt with the AI
-    const response = await queryAI(conversation);
+    // Track the complete response
+    let completeResponse = '';
 
-    // Add the AI's response to the conversation
-    promptManager.addAssistantResponse(response);
+    // Track tool call results to send to the renderer
+    const toolResults: ToolResult[] = [];
 
-    // Return the response to the renderer
+    // Create a callback for the streaming response
+    const streamCallback = (text: string, done: boolean) => {
+      // Add the text to the complete response
+      completeResponse += text;
+
+      // Send the streamed chunk to the renderer
+      if (mainWindow) {
+        mainWindow.webContents.send('stream-response', {
+          text,
+          done,
+          toolResults: [...toolResults], // Send a copy of current tool results
+        });
+      }
+
+      // If this is the final chunk, add the complete response to the conversation
+      if (done) {
+        promptManager.addAssistantResponse(completeResponse);
+      }
+    };
+
+    // Create a callback for tool execution results
+    const toolCallback: ToolExecutionCallback = (result: ToolResult) => {
+      // Add the result to the tool results array
+      toolResults.push(result);
+
+      // Send the tool execution result to the renderer
+      if (mainWindow) {
+        mainWindow.webContents.send('tool-execution', result);
+      }
+    };
+
+    // Process the prompt with the AI using streaming
+    await streamQueryAI(conversation, streamCallback, toolCallback);
+
+    // Return success to the renderer
     return {
       success: true,
-      response,
+      toolResults,
       conversation: promptManager.getConversation(),
     };
   } catch (error) {
